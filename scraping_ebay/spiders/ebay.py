@@ -3,7 +3,7 @@ import scrapy
 
 
 class EbaySpider(scrapy.Spider):
-	
+
 	name = "ebay"
 	allowed_domains = ["ebay.com"]
 	start_urls = ["https://www.ebay.com"]
@@ -13,27 +13,27 @@ class EbaySpider(scrapy.Spider):
 		self.search_string = search
 
 	def parse(self, response):
-		# Extrach the trksid to build a search request	
-		trksid = response.css("input[type='hidden'][name='_trksid']").xpath("@value").extract()[0]       
-		
+		# Extrach the trksid to build a search request
+		trksid = response.css("input[type='hidden'][name='_trksid']").xpath("@value").extract()[0]
+
 		# Build the url and start the requests
 		yield scrapy.Request("http://www.ebay.com/sch/i.html?_from=R40&_trksid=" + trksid +
-							 "&_nkw=" + self.search_string.replace(' ','+') + "&_ipg=200", 
-							 callback=self.parse_link)
+							"&_nkw=" + self.search_string.replace(' ','+') + "&_ipg=200",
+							callback=self.parse_link)
 
 	# Parse the search results
 	def parse_link(self, response):
-		# Extract the list of products 
+		# Extract the list of products
 		results = response.xpath('//div/div/ul/li[contains(@class, "s-item" )]')
 
 		# Extract info for each product
-		for product in results:		
+		for product in results:
 			name = product.xpath('.//*[@class="s-item__title"]//text()').extract_first()
 			# Sponsored or New Listing links have a different class
 			if name == None:
-				name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]/text()').extract_first()			
+				name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]/text()').extract_first()
 				if name == None:
-					name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]//text()').extract_first()			
+					name = product.xpath('.//*[@class="s-item__title s-item__title--has-tags"]//text()').extract_first()
 			if name == 'New Listing':
 				name = product.xpath('.//*[@class="s-item__title"]//text()').extract()[1]
 
@@ -48,22 +48,22 @@ class EbaySpider(scrapy.Spider):
 			product_url = product.xpath('.//a[@class="s-item__link"]/@href').extract_first()
 
 			# Set default values
-			stars = 0
-			ratings = 0
+			# stars = 0
+			# ratings = 0
 
-			stars_text = product.xpath('.//*[@class="clipped"]/text()').extract_first()
-			if stars_text: stars = stars_text[:3]
-			ratings_text = product.xpath('.//*[@aria-hidden="true"]/text()').extract_first()
-			if ratings_text: ratings = ratings_text.split(' ')[0]
+			# stars_text = product.xpath('.//*[@class="clipped"]/text()').extract_first()
+			# if stars_text: stars = stars_text[:3]
+			# ratings_text = product.xpath('.//*[@aria-hidden="true"]/text()').extract_first()
+			# if ratings_text: ratings = ratings_text.split(' ')[0]
 
 			summary_data = {
 							"Name":name,
 							"Status":status,
-							#"Seller_Level":seller_level,
-							#"Location":location,
+							# "Seller_Level":seller_level,
+							"Location":location,
 							"Price":price,
-							"Stars":stars,
-							"Ratings":ratings,
+							# "Stars":stars,
+							# "Ratings":ratings,
 							"URL": product_url
 							}
 
@@ -89,8 +89,19 @@ class EbaySpider(scrapy.Spider):
 		# Get the summary data
 		data = response.meta['summary_data']
 
-		# Add more data from details page
-		data['UPC'] = response.xpath('//h2[@itemprop="gtin13"]/text()').extract_first()
+		seller_section = response.xpath('//*[@class="ux-seller-section__content"]')[0]
+		# print('seller_section: {}'.format(seller_section))
+
+		# for section__item in seller_section:
+		data['Seller'] = seller_section.xpath('//*[@class="ux-textspans ux-textspans--PSEUDOLINK ux-textspans--BOLD"]/text()').extract_first()
+
+		for element in seller_section.xpath('//*[@class="ux-textspans ux-textspans--PSEUDOLINK"]/text()').extract():
+			if element.isdigit():
+				data['No. feebacks'] = element
+
+		for element in seller_section.xpath('//*[@class="ux-textspans"]/text()').extract():
+			if element.find("Positive feedback") != -1:
+				data['Possity feedback'] = element
 
 		yield data
 
